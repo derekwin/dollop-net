@@ -18,8 +18,8 @@ type FrameStream struct {
 }
 
 // NewFrameStream creates a new FrameStream.
-func NewFrameStream(s quic.Stream) FrameStream {
-	return FrameStream{stream: s}
+func NewFrameStream(s quic.Stream) *FrameStream {
+	return &FrameStream{stream: s}
 }
 
 // ReadFrame reads next frame from underlying stream.

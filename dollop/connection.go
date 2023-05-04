@@ -14,63 +14,94 @@ type StreamID int64
 
 const ServerConnectionCloseCode quic.ApplicationErrorCode = 701
 
-type ConnectionIS interface {
-	GetConn()
-	setControlStream()
-	addDataStream()
-	deleteDataStream()
+type ConnectionI interface {
+	GetConn() quic.Connection
+	GetStream(id StreamID) (quic.Stream, error)
+	setControlStream(stream *FrameStream)
+	addDataStream(id StreamID, stream quic.Stream)
+	deleteStream(id StreamID)
 	Close()
-
-	// for Server connection
-	Serve()
-	controlStreamLoop()
 }
 
-type ConnectionIC interface {
-	GetConn()
-	setControlStream()
-	addDataStream()
-	deleteDataStream()
-	Close()
-
-	// for Client connection
-	Connect()
-}
-
-type ServerConnection struct {
+type Connection struct {
 	ctx                   context.Context
 	conn                  quic.Connection
-	controlStream         FrameStream // control stream
+	controlStream         *FrameStream // control stream
 	requestDataStreamChan chan *frame.RequestDataStreamFrame
 	streams               sync.Map // data stream
 	group                 sync.WaitGroup
 }
 
-func NewServerConnection(ctx context.Context, conn quic.Connection) *ServerConnection {
-	return &ServerConnection{ctx: ctx, conn: conn, requestDataStreamChan: make(chan *frame.RequestDataStreamFrame, 10)}
+func newConnection(ctx context.Context) Connection {
+	return Connection{ctx: ctx, requestDataStreamChan: make(chan *frame.RequestDataStreamFrame, 10)}
 }
 
-func handler(stream quic.Stream) error {
-	fmt.Println("data from stream id ", stream.StreamID())
+func (c *Connection) Close() {
 
-	buf := make([]byte, 512)
-	_, err := stream.Read(buf[:])
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Printf("handler data %s \n", buf)
-	_, err = stream.Write(buf[:])
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-	return nil
+	c.controlStream.Close()
+
+	c.streams.Range(func(key, value interface{}) bool {
+		stream := value.(quic.Stream)
+		stream.Close()
+		return true
+	})
+
+	c.conn.CloseWithError(ServerConnectionCloseCode, "server side close this conn")
 }
 
-func (cs *ServerConnection) Serve(ctx context.Context) <-chan struct{} {
+func (c *Connection) GetConn() quic.Connection {
+	return c.conn
+}
+
+func (c *Connection) GetStream(id StreamID) (quic.Stream, error) {
+	stream, ok := c.streams.Load(id)
+	if !ok {
+		return nil, fmt.Errorf("err get valid stream")
+	}
+	return stream.(quic.Stream), nil
+}
+
+func (c *Connection) setControlStream(stream *FrameStream) {
+	c.controlStream = stream
+}
+
+func (c *Connection) addDataStream(id StreamID, stream quic.Stream) {
+	c.streams.Store(id, stream)
+}
+
+func (c *Connection) deleteStream(id StreamID) {
+	c.streams.Delete(id)
+}
+
+func (c *Connection) Wait() { c.group.Wait() }
+
+// Server Connection impliment specisal
+type ConnectionIS interface {
+	ConnectionI
+	// for Server connection
+	Serve()
+	bindRouters([]RouterI)
+	controlStreamLoop()
+}
+
+type ServerConnection struct {
+	*Connection
+	Routers []RouterI
+}
+
+func NewServerConnection(ctx context.Context, qconn quic.Connection) *ServerConnection {
+	conn := newConnection(ctx)
+
+	// init other value
+	conn.conn = qconn
+
+	return &ServerConnection{Connection: &conn}
+}
+
+func (sc *ServerConnection) Serve(ctx context.Context) <-chan struct{} {
 	done := make(chan struct{})
 
-	qconn := cs.conn
+	qconn := sc.conn
 
 	// wg := new(sync.WaitGroup)
 
@@ -80,42 +111,42 @@ func (cs *ServerConnection) Serve(ctx context.Context) <-chan struct{} {
 	}
 	defer controlStream.Close()
 
-	cs.setControlStream(NewFrameStream(controlStream))
-	go cs.controlStreamLoop()
+	sc.setControlStream(NewFrameStream(controlStream))
+	go sc.controlStreamLoop()
 
-	go func(cs *ServerConnection) {
+	go func(sc *ServerConnection) {
 
-		defer cs.Close()
+		defer sc.Close()
 
 		select {
 		case <-ctx.Done():
 			return
-		case <-cs.streamManager(ctx):
+		case <-sc.streamManager(ctx):
 		}
-	}(cs)
+	}(sc)
 
 	return done
 }
 
-func (cs *ServerConnection) controlStreamLoop() {
+func (sc *ServerConnection) controlStreamLoop() {
 	for {
-		f, err := cs.controlStream.ReadFrame()
+		f, err := sc.controlStream.ReadFrame()
 		if err != nil {
-			cs.conn.CloseWithError(0, err.Error())
+			sc.conn.CloseWithError(0, err.Error())
 			return
 		}
 		switch ff := f.(type) {
 		case frame.RequestDataStreamFrame:
-			cs.requestDataStreamChan <- &ff
+			sc.requestDataStreamChan <- &ff
 		default:
 			fmt.Println("control stream read unexcepted frame", "frame_type", f.Type())
 		}
 	}
 }
 
-func (cs *ServerConnection) streamManager(ctx context.Context) chan struct{} {
+func (sc *ServerConnection) streamManager(ctx context.Context) chan struct{} {
 	for {
-		ff, ok := <-cs.requestDataStreamChan
+		ff, ok := <-sc.requestDataStreamChan
 		if !ok {
 			fmt.Println(io.EOF)
 		}
@@ -123,58 +154,93 @@ func (cs *ServerConnection) streamManager(ctx context.Context) chan struct{} {
 		// err := handshake(ff)
 
 		// 如果出错，返回拒绝
-		// cs.controlStream.WriteFrame(frame.NewRejectDataStreamFrame(frame.StreamID(cs.controlStream.stream.StreamID())))
-		fmt.Println("receive request", ff)
-		newStream, err := cs.conn.OpenStreamSync(ctx)
+		// cs.controlStream.WriteFrame(frame.NewRejectDataStreamFrame())
+
+		fmt.Println("receive new stream request", ff)
+		newStream, err := sc.conn.OpenStreamSync(ctx)
 		if err != nil {
 			fmt.Println(err)
 		}
 		fmt.Println("open new stream", newStream.StreamID())
-		_, err = newStream.Write(frame.NewAckDataStreamFrame(frame.StreamID(cs.controlStream.stream.StreamID())).Encode())
+		_, err = newStream.Write(frame.NewAckDataStreamFrame().Encode())
 		if err != nil {
 			fmt.Println(err)
 		}
-		fmt.Println("write ack to new stream")
+		fmt.Println("ack to new stream")
 
-		cs.streams.Store(ff.StreamId(), newStream)
+		sc.addDataStream(StreamID(newStream.StreamID()), newStream)
 
-		// 将数据请求封装为request，然后分别调用对应的router
-		go cs.processStream(newStream)
+		go sc.processStream(newStream)
 	}
 }
 
-func (cs *ServerConnection) processStream(stream quic.Stream) {
-	fmt.Println("process new stream", stream.StreamID())
-	handler(stream)
+func (sc *ServerConnection) processStream(stream quic.Stream) {
+	fmt.Println("process stream", stream.StreamID())
+	buf := make([]byte, 512) // 分配一次，重复使用
+	for {
+		// 判断ctx业务退出? 是否有必要
+
+		// 读取数据
+		_, err := stream.Read(buf[:])
+		if err != nil {
+			// fmt.Println(err) // 客户端退出后，会触发超时
+			break
+		}
+		// 将数据请求封装为request，然后分别调用对应的router
+		// 生成request
+		req := &Request{conn: sc, stream: stream, data: buf} // 重复使用buf的前提是这里传值而不是传指针
+
+		// 交给router处理
+		go func(req *Request) {
+			for _, ri := range sc.Routers {
+				ri.PreHandler(req)
+				ri.Handler(req)
+				ri.AfterHandler(req)
+			}
+		}(req)
+	}
+	// fmt.Println("close conn") // 客户端退出，触发超时，关闭流
+	sc.Close()
 }
 
-func (cs *ServerConnection) Close() {
-
-	cs.controlStream.Close()
-
-	cs.streams.Range(func(key, value interface{}) bool {
-		stream := value.(quic.Stream)
-		stream.Close()
-		return true
-	})
-
-	cs.conn.CloseWithError(ServerConnectionCloseCode, "server side close this conn")
+func (sc *ServerConnection) bindRouters(rs []RouterI) {
+	sc.Routers = append(sc.Routers, rs...)
 }
 
-func (cs *ServerConnection) GetConn() quic.Connection {
-	return cs.conn
+// Client Connection impliment
+type ConnectionIC interface {
+	ConnectionI
+	// for Client connection
+	OpenNewDataStream() (quic.Stream, StreamID, error)
 }
 
-func (cs *ServerConnection) setControlStream(stream FrameStream) {
-	cs.controlStream = stream
+type ClientConnection struct {
+	*Connection
 }
 
-func (cs *ServerConnection) addDataStream(id StreamID, stream quic.Stream) {
-	cs.streams.Store(id, stream)
+func NewClientConnection(ctx context.Context, qconn quic.Connection) *ClientConnection {
+	conn := newConnection(ctx)
+
+	// init other value
+	conn.conn = qconn
+
+	return &ClientConnection{Connection: &conn}
 }
 
-func (cs *ServerConnection) deleteStream(id StreamID) {
-	cs.streams.Delete(id)
-}
+func (cc *ClientConnection) OpenNewDataStream() (quic.Stream, StreamID, error) {
+	if cc.controlStream == nil {
+		return nil, 0, fmt.Errorf("controlStream is nil")
+	}
 
-func (cs *ServerConnection) Wait() { cs.group.Wait() }
+	cc.controlStream.WriteFrame(frame.NewRequestDataStreamFrame())
+
+	fmt.Println("request new data stream, awaiting")
+	newstream, err := cc.conn.AcceptStream(cc.ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	fmt.Println("reqeust success, new data stream", newstream.StreamID())
+	cc.streams.Store(newstream.StreamID(), newstream)
+
+	return newstream, StreamID(newstream.StreamID()), nil
+}

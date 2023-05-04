@@ -41,6 +41,12 @@ func WithTlsConfig(tc *tls.Config) WithConfig {
 	}
 }
 
+func WithRouter(r RouterI) WithConfig {
+	return func(o *Server) {
+		o.Routers = append(o.Routers, r)
+	}
+}
+
 type FrameHandler func(c *context.Context) error
 type ConnectionHandler func(conn quic.Connection)
 
@@ -58,7 +64,7 @@ type Server struct {
 	// afterHandlers           []FrameHandler
 	// connectionCloseHandlers []ConnectionHandler
 
-	Router   Router
+	Routers  []RouterI
 	Listener quic.Listener
 	// logger     *slog.Logger
 
@@ -111,6 +117,7 @@ func (s *Server) Serve(ctx context.Context, addr string) error {
 		}
 
 		conn := NewServerConnection(ctx, qconn)
+		conn.bindRouters(s.Routers) // 将服务器路由绑定到流路由
 
 		go func(conn *ServerConnection) {
 

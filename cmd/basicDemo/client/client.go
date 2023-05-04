@@ -4,14 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
+	"time"
 
 	"github.com/derekwin/dollop-net/dollop"
-	"github.com/derekwin/dollop-net/dollop/frame"
 	dtls "github.com/derekwin/dollop-net/dollop/tls"
 	"github.com/quic-go/quic-go"
 )
-
-const testaddr = "127.0.0.1:19999"
 
 func handler(ctx context.Context, stream quic.Stream, data []byte) {
 	fmt.Printf("Client: Sending '%s' to stream %d\n", data, stream.StreamID())
@@ -21,7 +20,7 @@ func handler(ctx context.Context, stream quic.Stream, data []byte) {
 	}
 	fmt.Println("write success ", cnt)
 
-	buf := make([]byte, len(data))
+	buf := make([]byte, 512)
 	_, err = io.ReadFull(stream, buf)
 	if err != nil {
 		panic(err)
@@ -35,32 +34,29 @@ func main() {
 		panic(err)
 	}
 
-	conn, err := quic.DialAddr(testaddr, tlsClient, dollop.DefalutQuicConfig)
+	client := dollop.NewClient("testclient", tlsClient, dollop.DefalutQuicConfig)
+
+	client.Connect("127.0.0.1:19999")
+
+	datastream, _, err := client.NewStream()
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
-	stream, err := conn.OpenStreamSync(context.Background())
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(11)
-	controlStream := dollop.NewFrameStream(stream)
-
-	controlStream.WriteFrame(frame.NewRequestDataStreamFrame(frame.StreamID(stream.StreamID())))
-
-	// for {
-	// 	dataStream, err := conn.AcceptStream(conn.Context())
-	// 	if err != nil {
-	// 		return
-	// 	}
-	// }
-	fmt.Println("request new data stream, awaiting")
-	datastream, err := conn.AcceptStream(conn.Context())
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println("new data stream", datastream.StreamID())
 	data := []byte("data from clienttttt")
+	// handler(context.Background(), datastream, data)
+
+	time.Sleep(time.Second * 5)
+	datastream2, _, err := client.NewStream()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	time.Sleep(time.Second * 2)
 	handler(context.Background(), datastream, data)
+	handler(context.Background(), datastream2, data)
+	time.Sleep(time.Second * 5)
+	handler(context.Background(), datastream, data)
+	time.Sleep(time.Second * 5)
+	handler(context.Background(), datastream2, data)
 }

@@ -5,8 +5,6 @@ import (
 	"io"
 )
 
-type StreamID int64
-
 // Type represents the type of frame.
 type Type uint8
 
@@ -37,7 +35,7 @@ func ParseFrame(stream io.Reader) (Frame, error) {
 	}
 
 	frameType := buf[0]
-	fmt.Println(frameType)
+
 	// fmt.Println(0x80 | byte(RequestDataStreamFrameTag))
 	// fmt.Println(0x80 | byte(AckDataStreamFrameTag))
 	switch frameType {

@@ -1,1 +1,50 @@
 package dollop
+
+import (
+	"context"
+	"crypto/tls"
+	"fmt"
+
+	"github.com/quic-go/quic-go"
+)
+
+// Client
+type Client struct {
+	// server name
+	Name string
+
+	QuicConfig *quic.Config
+	TlsConfig  *tls.Config
+	// logger     *slog.Logger
+	conn *ClientConnection
+}
+
+func NewClient(name string, tlsConfig *tls.Config, qConf *quic.Config) *Client {
+	return &Client{Name: name, TlsConfig: tlsConfig, QuicConfig: qConf}
+}
+
+func (c *Client) Connect(addr string) {
+	conn, err := quic.DialAddr(addr, c.TlsConfig, c.QuicConfig)
+	if err != nil {
+		panic(err)
+	}
+
+	c.conn = NewClientConnection(context.Background(), conn)
+
+	stream, err := conn.OpenStreamSync(context.Background())
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(11)
+	controlStream := NewFrameStream(stream)
+
+	c.conn.setControlStream(controlStream)
+}
+
+func (c *Client) NewStream() (quic.Stream, StreamID, error) {
+	return c.conn.OpenNewDataStream()
+}
+
+func (c *Client) GetStream(id StreamID) (quic.Stream, error) {
+	return c.conn.GetStream(id)
+}

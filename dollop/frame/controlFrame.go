@@ -7,15 +7,10 @@ import (
 
 // client send RequestDataSreamFrame to apply a new stream from server
 type RequestDataStreamFrame struct {
-	streamId StreamID
 }
 
 func (rdsf RequestDataStreamFrame) Type() Type {
 	return RequestDataStreamFrameTag
-}
-
-func (rdsf RequestDataStreamFrame) StreamId() StreamID {
-	return rdsf.streamId
 }
 
 func (rdsf RequestDataStreamFrame) Encode() []byte {
@@ -24,8 +19,8 @@ func (rdsf RequestDataStreamFrame) Encode() []byte {
 	return buf.Bytes()
 }
 
-func NewRequestDataStreamFrame(id StreamID) RequestDataStreamFrame {
-	return RequestDataStreamFrame{streamId: id}
+func NewRequestDataStreamFrame() RequestDataStreamFrame {
+	return RequestDataStreamFrame{}
 }
 
 func ParseRequestDataStreamFrame(buf []byte) (RequestDataStreamFrame, error) {
@@ -34,7 +29,6 @@ func ParseRequestDataStreamFrame(buf []byte) (RequestDataStreamFrame, error) {
 
 // AckDataStreamFrame sent from server to client after client sent RequestDataSreamFrame
 type AckDataStreamFrame struct {
-	streamId StreamID
 }
 
 func (adsf AckDataStreamFrame) Type() Type {
@@ -47,8 +41,8 @@ func (adsf AckDataStreamFrame) Encode() []byte {
 	return buf.Bytes()
 }
 
-func NewAckDataStreamFrame(id StreamID) AckDataStreamFrame {
-	return AckDataStreamFrame{streamId: id}
+func NewAckDataStreamFrame() AckDataStreamFrame {
+	return AckDataStreamFrame{}
 }
 
 func ParseAckDataStreamFrame(buf []byte) (AckDataStreamFrame, error) {
@@ -57,7 +51,6 @@ func ParseAckDataStreamFrame(buf []byte) (AckDataStreamFrame, error) {
 
 // RejectDataStreamFrame sent from server to client while occur err
 type RejectDataStreamFrame struct {
-	streamId StreamID
 }
 
 func (adsf RejectDataStreamFrame) Type() Type {
@@ -70,8 +63,8 @@ func (adsf RejectDataStreamFrame) Encode() []byte {
 	return buf.Bytes()
 }
 
-func NewRejectDataStreamFrame(id StreamID) RejectDataStreamFrame {
-	return RejectDataStreamFrame{streamId: id}
+func NewRejectDataStreamFrame() RejectDataStreamFrame {
+	return RejectDataStreamFrame{}
 }
 
 func ParseRejectDataStreamFrame(buf []byte) (RejectDataStreamFrame, error) {

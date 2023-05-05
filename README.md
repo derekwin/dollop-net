@@ -1,7 +1,10 @@
 # dollop-net
 
-TODOing, :)
+Dollop-Net is a Streaming concurrent server framework based on quic(quic-go). 
 
+Aim to message forwarding for backend modules, long-linked game servers, and message handling plugins for web frameworks.
+
+QUIC-based Decentralized Distributed gaming framework.
 
 
 references:

@@ -10,10 +10,9 @@ import (
 	"github.com/derekwin/dollop-net/dollop"
 	"github.com/derekwin/dollop-net/dollop/frame"
 	dtls "github.com/derekwin/dollop-net/dollop/tls"
-	"github.com/quic-go/quic-go"
 )
 
-func handler(ctx context.Context, stream quic.Stream, data []byte) {
+func handler(ctx context.Context, stream dollop.RawStreamI, data []byte) {
 	fmt.Printf("Client: Sending '%s' to stream %d\n", data, stream.StreamID())
 	cnt, err := stream.Write(data)
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/derekwin/dollop-net/dollop"
+	"github.com/derekwin/dollop-net/dollop/frame"
 	dtls "github.com/derekwin/dollop-net/dollop/tls"
 	"github.com/quic-go/quic-go"
 )
@@ -38,25 +39,32 @@ func main() {
 
 	client.Connect("127.0.0.1:19999")
 
-	datastream, _, err := client.NewStream()
+	datastream, _, err := client.NewRawStream()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	data := []byte("data from clienttttt")
-	// handler(context.Background(), datastream, data)
+	handler(context.Background(), datastream, data)
 
-	time.Sleep(time.Second * 5)
-	datastream2, _, err := client.NewStream()
+	time.Sleep(time.Second * 2)
+	datastream2, _, err := client.NewRawStream()
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	time.Sleep(time.Second * 2)
 	handler(context.Background(), datastream, data)
+	time.Sleep(time.Second * 2)
 	handler(context.Background(), datastream2, data)
-	time.Sleep(time.Second * 5)
-	handler(context.Background(), datastream, data)
-	time.Sleep(time.Second * 5)
-	handler(context.Background(), datastream2, data)
+
+	framestream, _, err := client.NewFrameStream()
+	if err != nil {
+		log.Fatal(err)
+	}
+	framestream.WriteFrame(frame.NewDataFrame(data))
+	f, err := framestream.ReadFrame()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(f.GetData()))
 }

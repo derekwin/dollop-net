@@ -41,9 +41,15 @@ func WithTlsConfig(tc *tls.Config) WithConfig {
 	}
 }
 
-func WithRouter(r RouterI) WithConfig {
+func WithRawRouter(r RawRouterI) WithConfig {
 	return func(o *Server) {
-		o.Routers = append(o.Routers, r)
+		o.RawRouters = append(o.RawRouters, r)
+	}
+}
+
+func WithFrameRouter(r FrameRouterI) WithConfig {
+	return func(o *Server) {
+		o.FrameRouters = append(o.FrameRouters, r)
 	}
 }
 
@@ -64,8 +70,9 @@ type Server struct {
 	// afterHandlers           []FrameHandler
 	// connectionCloseHandlers []ConnectionHandler
 
-	Routers  []RouterI
-	Listener quic.Listener
+	RawRouters   []RawRouterI
+	FrameRouters []FrameRouterI
+	Listener     quic.Listener
 	// logger     *slog.Logger
 
 	mutex sync.Mutex
@@ -117,7 +124,8 @@ func (s *Server) Serve(ctx context.Context, addr string) error {
 		}
 
 		conn := NewServerConnection(ctx, qconn)
-		conn.bindRouters(s.Routers) // 将服务器路由绑定到流路由
+		conn.bindRawRouters(s.RawRouters) // 将服务器路由绑定到流路由
+		conn.bindFrameRouters(s.FrameRouters)
 
 		go func(conn *ServerConnection) {
 

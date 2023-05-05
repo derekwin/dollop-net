@@ -1,72 +1,101 @@
 package frame
 
-import (
-	"bytes"
-	"encoding/binary"
-)
-
-// client send RequestDataSreamFrame to apply a new stream from server
-type RequestDataStreamFrame struct {
+// client send RequestRawSreamFrame to apply a new stream from server
+type RequestRawStreamFrame struct {
+	data []byte
 }
 
-func (rdsf RequestDataStreamFrame) Type() Type {
-	return RequestDataStreamFrameTag
+func (rdsf RequestRawStreamFrame) Type() Type {
+	return RequestRawStreamFrameTag
 }
 
-func (rdsf RequestDataStreamFrame) Encode() []byte {
-	buf := bytes.NewBuffer([]byte{})
-	binary.Write(buf, binary.BigEndian, RequestDataStreamFrameTag)
-	return buf.Bytes()
+func (rdsf RequestRawStreamFrame) Encode() []byte {
+	return WriteFrame(rdsf.data, RequestRawStreamFrameTag)
 }
 
-func NewRequestDataStreamFrame() RequestDataStreamFrame {
-	return RequestDataStreamFrame{}
+func (rdsf RequestRawStreamFrame) GetData() []byte {
+	return rdsf.data
 }
 
-func ParseRequestDataStreamFrame(buf []byte) (RequestDataStreamFrame, error) {
-	return RequestDataStreamFrame{}, nil
+func NewRequestRawStreamFrame() RequestRawStreamFrame {
+	return RequestRawStreamFrame{}
 }
 
-// AckDataStreamFrame sent from server to client after client sent RequestDataSreamFrame
-type AckDataStreamFrame struct {
+func ParseRequestRawStreamFrame(data []byte) (RequestRawStreamFrame, error) {
+	return RequestRawStreamFrame{data: data}, nil
 }
 
-func (adsf AckDataStreamFrame) Type() Type {
-	return AckDataStreamFrameTag
+// client send RequestFrameStreamFrame to apply a new framestream from server
+type RequestFrameStreamFrame struct {
+	data []byte
 }
 
-func (adsf AckDataStreamFrame) Encode() []byte {
-	buf := bytes.NewBuffer([]byte{})
-	binary.Write(buf, binary.BigEndian, AckDataStreamFrameTag)
-	return buf.Bytes()
+func (rfsf RequestFrameStreamFrame) Type() Type {
+	return RequestFrameStreamFrameTag
 }
 
-func NewAckDataStreamFrame() AckDataStreamFrame {
-	return AckDataStreamFrame{}
+func (rfsf RequestFrameStreamFrame) Encode() []byte {
+	return WriteFrame(rfsf.data, RequestFrameStreamFrameTag)
 }
 
-func ParseAckDataStreamFrame(buf []byte) (AckDataStreamFrame, error) {
-	return AckDataStreamFrame{}, nil
+func (rfsf RequestFrameStreamFrame) GetData() []byte {
+	return rfsf.data
 }
 
-// RejectDataStreamFrame sent from server to client while occur err
-type RejectDataStreamFrame struct {
+func NewRequestFrameStreamFrame() RequestFrameStreamFrame {
+	return RequestFrameStreamFrame{}
 }
 
-func (adsf RejectDataStreamFrame) Type() Type {
-	return RejectDataStreamFrameTag
+func ParseRequestFrameStreamFrame(data []byte) (RequestFrameStreamFrame, error) {
+	return RequestFrameStreamFrame{data: data}, nil
 }
 
-func (adsf RejectDataStreamFrame) Encode() []byte {
-	buf := bytes.NewBuffer([]byte{})
-	binary.Write(buf, binary.BigEndian, RejectDataStreamFrameTag)
-	return buf.Bytes()
+// AckStreamFrame sent from server to client after client sent RequestDawSreamFrame
+type AckStreamFrame struct {
+	data []byte
 }
 
-func NewRejectDataStreamFrame() RejectDataStreamFrame {
-	return RejectDataStreamFrame{}
+func (adsf AckStreamFrame) Type() Type {
+	return AckStreamFrameTag
 }
 
-func ParseRejectDataStreamFrame(buf []byte) (RejectDataStreamFrame, error) {
-	return RejectDataStreamFrame{}, nil
+func (adsf AckStreamFrame) Encode() []byte {
+	return WriteFrame(adsf.data, AckStreamFrameTag)
+}
+
+func (adsf AckStreamFrame) GetData() []byte {
+	return adsf.data
+}
+
+func NewAckStreamFrame() AckStreamFrame {
+	return AckStreamFrame{}
+}
+
+func ParseAckStreamFrame(data []byte) (AckStreamFrame, error) {
+	return AckStreamFrame{data: data}, nil
+}
+
+// RejectRawStreamFrame sent from server to client while occur err
+type RejectStreamFrame struct {
+	data []byte
+}
+
+func (rdsf RejectStreamFrame) Type() Type {
+	return RejectStreamFrameTag
+}
+
+func (rdsf RejectStreamFrame) Encode() []byte {
+	return WriteFrame(rdsf.data, RejectStreamFrameTag)
+}
+
+func (rdsf RejectStreamFrame) GetData() []byte {
+	return rdsf.data
+}
+
+func NewRejectStreamFrame() RejectStreamFrame {
+	return RejectStreamFrame{}
+}
+
+func ParseRejectStreamFrame(data []byte) (RejectStreamFrame, error) {
+	return RejectStreamFrame{data: data}, nil
 }

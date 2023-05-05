@@ -5,19 +5,33 @@ import (
 	"fmt"
 
 	"github.com/derekwin/dollop-net/dollop"
+	"github.com/derekwin/dollop-net/dollop/frame"
 	dtls "github.com/derekwin/dollop-net/dollop/tls"
 )
 
 const testaddr = "127.0.0.1:19999"
 
-type LocalRouter struct {
-	dollop.BaseRouter
+type RawStreamRouter struct {
+	dollop.BaseRawRouter
 }
 
-func (lr LocalRouter) Handler(req dollop.RequestI) {
+func (lr RawStreamRouter) Handler(req dollop.RawRequestI) {
 	stream := req.GetStream()
-	fmt.Printf("--- handler data '%s' from id %d \n", req.GetData(), stream.StreamID())
+	fmt.Printf("--- handler raw data '%s' from id %d \n", req.GetData(), stream.StreamID())
 	_, err := stream.Write(req.GetData())
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+type FrameStreamRouter struct {
+	dollop.BaseFrameRouter
+}
+
+func (lr FrameStreamRouter) Handler(req dollop.FrameRequestI) {
+	stream := req.GetStream()
+	fmt.Printf("--- handler frame data '%s' from id %d \n", string(req.GetData()), stream.StreamID())
+	err := stream.WriteFrame(frame.NewDataFrame(req.GetData()))
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -29,10 +43,11 @@ func main() {
 		panic(err)
 	}
 
-	router := LocalRouter{}
+	rawrouter := RawStreamRouter{}
+	framerouter := FrameStreamRouter{}
 
 	server, err := dollop.NewServer("test", dollop.WithTlsConfig(tlsServer),
-		dollop.WithRouter(router))
+		dollop.WithRawRouter(rawrouter), dollop.WithFrameRouter(framerouter))
 	if err != nil {
 		panic(err)
 	}

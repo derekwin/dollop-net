@@ -11,6 +11,13 @@ import (
 // ErrStreamNil be returned if FrameStream underlying stream is nil.
 var ErrStreamNil = errors.New("frame stream underlying is nil")
 
+type FrameStreamI interface {
+	StreamID() StreamID
+	ReadFrame() (frame.Frame, error)
+	WriteFrame(f frame.Frame) error
+	Close()
+}
+
 // FrameStream is the frame.ReadWriter that goroutinue read write safely.
 type FrameStream struct {
 	stream quic.Stream
@@ -18,8 +25,12 @@ type FrameStream struct {
 }
 
 // NewFrameStream creates a new FrameStream.
-func NewFrameStream(s quic.Stream) *FrameStream {
+func NewFrameStream(s quic.Stream) FrameStreamI {
 	return &FrameStream{stream: s}
+}
+
+func (fs *FrameStream) StreamID() StreamID {
+	return StreamID(fs.stream.StreamID())
 }
 
 // ReadFrame reads next frame from underlying stream.

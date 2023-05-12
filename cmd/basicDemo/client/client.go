@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/derekwin/dollop-net/dollop"
-	"github.com/derekwin/dollop-net/dollop/frame"
 	dtls "github.com/derekwin/dollop-net/dollop/tls"
 )
 
@@ -38,13 +37,14 @@ func main() {
 
 	client.Connect("127.0.0.1:19999")
 
-	datastream, _, err := client.NewRawStream()
+	time.Sleep(time.Second * 1)
+	rawstream, _, err := client.NewRawStream()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	data := []byte("data from clienttttt")
-	handler(context.Background(), datastream, data)
+	handler(context.Background(), rawstream, data)
 
 	time.Sleep(time.Second * 2)
 	datastream2, _, err := client.NewRawStream()
@@ -52,7 +52,7 @@ func main() {
 		log.Fatal(err)
 	}
 	time.Sleep(time.Second * 2)
-	handler(context.Background(), datastream, data)
+	handler(context.Background(), rawstream, data)
 	time.Sleep(time.Second * 2)
 	handler(context.Background(), datastream2, data)
 
@@ -60,7 +60,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	framestream.WriteFrame(frame.NewDataFrame(data))
+	framestream.WriteFrame(dollop.NewFrame(data))
 	f, err := framestream.ReadFrame()
 	if err != nil {
 		log.Fatal(err)

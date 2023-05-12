@@ -3,7 +3,6 @@ package dollop
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 
 	"github.com/quic-go/quic-go"
 )
@@ -35,17 +34,17 @@ func (c *Client) Connect(addr string) {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(11)
-	controlStream := NewFrameStream(stream)
+
+	controlStream := NewControlStream(stream)
 
 	c.conn.setControlStream(controlStream)
 }
 
-func (c *Client) NewRawStream() (quic.Stream, StreamID, error) {
+func (c *Client) NewRawStream() (RawStreamI, StreamID, error) {
 	return c.conn.OpenNewRawStream()
 }
 
-func (c *Client) GetRawStream(id StreamID) (quic.Stream, error) {
+func (c *Client) GetRawStream(id StreamID) (RawStreamI, error) {
 	return c.conn.GetRawStream(id)
 }
 

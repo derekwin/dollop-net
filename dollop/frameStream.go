@@ -1,31 +1,32 @@
 package dollop
 
 import (
+	"encoding/binary"
 	"errors"
+	"io"
 	"sync"
 
-	"github.com/derekwin/dollop-net/dollop/frame"
 	"github.com/quic-go/quic-go"
 )
 
 // ErrStreamNil be returned if FrameStream underlying stream is nil.
-var ErrStreamNil = errors.New("frame stream underlying is nil")
+var ErrFrameStreamNil = errors.New("FrameStream's stream is nil")
 
 type FrameStreamI interface {
 	StreamID() StreamID
-	ReadFrame() (frame.Frame, error)
-	WriteFrame(f frame.Frame) error
+	ReadFrame() (*Frame, error)
+	WriteFrame(f *Frame) error
 	Close()
 }
 
-// FrameStream is the frame.ReadWriter that goroutinue read write safely.
+// FrameStream is the ReadWriter that goroutinue read write safely.
 type FrameStream struct {
 	stream quic.Stream
 	mu     sync.Mutex
 }
 
 // NewFrameStream creates a new FrameStream.
-func NewFrameStream(s quic.Stream) FrameStreamI {
+func NewFrameStream(s quic.Stream) *FrameStream {
 	return &FrameStream{stream: s}
 }
 
@@ -33,18 +34,37 @@ func (fs *FrameStream) StreamID() StreamID {
 	return StreamID(fs.stream.StreamID())
 }
 
-// ReadFrame reads next frame from underlying stream.
-func (fs *FrameStream) ReadFrame() (frame.Frame, error) {
-	if fs.stream == nil {
-		return nil, ErrStreamNil
+// Frame :  | len:FrameLen | Msg |
+func readFrame(stream io.Reader) (*Frame, error) {
+	lenBuf := make([]byte, FrameLen)
+	_, err := stream.Read(lenBuf)
+	if err != nil {
+		return &Frame{}, err
 	}
-	return frame.ParseFrame(fs.stream)
+
+	bufferLen := binary.BigEndian.Uint32(lenBuf)
+
+	frameBuf := make([]byte, bufferLen)
+	_, err = stream.Read(frameBuf)
+	if err != nil {
+		return &Frame{}, err
+	}
+	//  Frame
+	return NewFrame(frameBuf), nil
+}
+
+// ReadFrame reads next frame from underlying stream.
+func (fs *FrameStream) ReadFrame() (*Frame, error) {
+	if fs.stream == nil {
+		return &Frame{}, ErrFrameStreamNil
+	}
+	return readFrame(fs.stream)
 }
 
 // WriteFrame writes a frame into underlying stream.
-func (fs *FrameStream) WriteFrame(f frame.Frame) error {
+func (fs *FrameStream) WriteFrame(f *Frame) error {
 	if fs.stream == nil {
-		return ErrStreamNil
+		return ErrFrameStreamNil
 	}
 	fs.mu.Lock()
 	defer fs.mu.Unlock()

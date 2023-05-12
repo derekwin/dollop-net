@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/derekwin/dollop-net/dollop"
-	"github.com/derekwin/dollop-net/dollop/frame"
 	dtls "github.com/derekwin/dollop-net/dollop/tls"
 )
 
@@ -31,7 +30,7 @@ type FrameStreamRouter struct {
 func (lr FrameStreamRouter) Handler(req dollop.FrameRequestI) {
 	stream := req.GetStream()
 	fmt.Printf("--- handler frame data '%s' from id %d \n", string(req.GetData()), stream.StreamID())
-	err := stream.WriteFrame(frame.NewDataFrame(req.GetData()))
+	err := stream.WriteFrame(dollop.NewFrame(req.GetData()))
 	if err != nil {
 		fmt.Println(err)
 	}

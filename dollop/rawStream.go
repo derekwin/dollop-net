@@ -9,6 +9,9 @@ type RawStreamI interface {
 	quic.Stream
 }
 
+type RawStream struct {
+}
+
 // NewFrameStream creates a new FrameStream.
 func NewRawStream(s RawStreamI) RawStreamI {
 	return s

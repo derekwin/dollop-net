@@ -1,7 +1,5 @@
 package dollop
 
-import "github.com/quic-go/quic-go"
-
 type RequestI interface {
 	GetConn() ConnectionI
 	GetData() []byte
@@ -9,14 +7,14 @@ type RequestI interface {
 
 type RawRequestI interface {
 	RequestI
-	GetStream() quic.Stream
+	GetStream() RawStreamI
 }
 
 // Request bind stream with data
 
 type RawRequest struct {
 	conn   ConnectionI
-	stream quic.Stream
+	stream RawStreamI
 	data   []byte
 }
 
@@ -24,7 +22,7 @@ func (r RawRequest) GetConn() ConnectionI {
 	return r.conn
 }
 
-func (r RawRequest) GetStream() quic.Stream {
+func (r RawRequest) GetStream() RawStreamI {
 	return r.stream
 }
 

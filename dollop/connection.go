@@ -6,7 +6,6 @@ import (
 	"io"
 	"sync"
 
-	"github.com/derekwin/dollop-net/dollop/frame"
 	"github.com/quic-go/quic-go"
 )
 
@@ -15,12 +14,12 @@ type StreamID int64
 const ServerConnectionCloseCode quic.ApplicationErrorCode = 701
 
 type ConnectionI interface {
-	GetConn() quic.Connection
-	GetRawStream(id StreamID) (RawStreamI, error)
-	GetFrameStream(id StreamID) (FrameStreamI, error)
-	setControlStream(stream FrameStreamI)
-	addRawStream(id StreamID, stream RawStreamI)
-	addFrameStream(id StreamID, stream FrameStreamI)
+	GetConn() *quic.Connection
+	GetRawStream(id StreamID) (RawStreamI, error)     // *RawStream
+	GetFrameStream(id StreamID) (FrameStreamI, error) // *FrameStream
+	setControlStream(stream ControlStreamI)           // *ControlStream
+	addRawStream(id StreamID, stream RawStreamI)      // *RawStrea
+	addFrameStream(id StreamID, stream FrameStreamI)  //*FrameStream
 	deleteRawStream(id StreamID)
 	deleteFrameStream(id StreamID)
 	Close()
@@ -30,17 +29,17 @@ type ConnectionI interface {
 type Connection struct {
 	ctx                    context.Context
 	conn                   quic.Connection
-	controlStream          FrameStreamI                        // control stream
-	requestRawStreamChan   chan *frame.RequestRawStreamFrame   // 管理无分包的流
-	requestFrameStreamChan chan *frame.RequestFrameStreamFrame // 管理帧流
-	rawStreams             sync.Map                            // 无分包的流 RawStreamI
-	frameStreams           sync.Map                            // 帧流 FrameStreamI use RawFrame
+	controlStream          ControlStreamI              // *ControlStream
+	requestRawStreamChan   chan *RequestRawStreamMsg   // 管理无分包的流
+	requestFrameStreamChan chan *RequestFrameStreamMsg // 管理帧流
+	rawStreams             sync.Map                    // 无分包的流 RawStreamI *RawStream
+	frameStreams           sync.Map                    // 帧流 FrameStreamI *FrameStream
 	group                  sync.WaitGroup
 }
 
-func newConnection(ctx context.Context) Connection {
-	return Connection{ctx: ctx, requestRawStreamChan: make(chan *frame.RequestRawStreamFrame, 10),
-		requestFrameStreamChan: make(chan *frame.RequestFrameStreamFrame, 10)}
+func newConnection(ctx context.Context) *Connection {
+	return &Connection{ctx: ctx, requestRawStreamChan: make(chan *RequestRawStreamMsg, 10),
+		requestFrameStreamChan: make(chan *RequestFrameStreamMsg, 10)}
 }
 
 func (c *Connection) Close() {
@@ -62,14 +61,14 @@ func (c *Connection) Close() {
 	c.conn.CloseWithError(ServerConnectionCloseCode, "server side close this conn")
 }
 
-func (c *Connection) GetConn() quic.Connection {
-	return c.conn
+func (c *Connection) GetConn() *quic.Connection {
+	return &c.conn
 }
 
 func (c *Connection) GetRawStream(id StreamID) (RawStreamI, error) {
 	stream, ok := c.rawStreams.Load(id)
 	if !ok {
-		return nil, fmt.Errorf("err get valid stream")
+		return nil, fmt.Errorf("err get valid raw stream")
 	}
 	return stream.(RawStreamI), nil
 }
@@ -77,12 +76,12 @@ func (c *Connection) GetRawStream(id StreamID) (RawStreamI, error) {
 func (c *Connection) GetFrameStream(id StreamID) (FrameStreamI, error) {
 	stream, ok := c.frameStreams.Load(id)
 	if !ok {
-		return &FrameStream{}, fmt.Errorf("err get valid stream")
+		return nil, fmt.Errorf("err get valid frame stream")
 	}
 	return stream.(FrameStreamI), nil
 }
 
-func (c *Connection) setControlStream(stream FrameStreamI) {
+func (c *Connection) setControlStream(stream ControlStreamI) {
 	c.controlStream = stream
 }
 
@@ -121,12 +120,7 @@ type ServerConnection struct {
 }
 
 func NewServerConnection(ctx context.Context, qconn quic.Connection) *ServerConnection {
-	conn := newConnection(ctx)
-
-	// init other value
-	conn.conn = qconn
-
-	return &ServerConnection{Connection: conn}
+	return &ServerConnection{Connection: Connection{conn: qconn}}
 }
 
 func (sc *ServerConnection) Serve(ctx context.Context) <-chan struct{} {
@@ -142,8 +136,7 @@ func (sc *ServerConnection) Serve(ctx context.Context) <-chan struct{} {
 	}
 	defer controlStream.Close()
 
-	sc.setControlStream(NewFrameStream(controlStream))
-	go sc.controlStreamLoop()
+	sc.setControlStream(NewControlStream(controlStream))
 
 	go func(sc *ServerConnection) {
 
@@ -156,6 +149,9 @@ func (sc *ServerConnection) Serve(ctx context.Context) <-chan struct{} {
 		}
 	}(sc)
 
+	// 先启动流管理器，再进行控制流管理循环
+	go sc.controlStreamLoop()
+
 	return done
 }
 
@@ -166,28 +162,38 @@ func (sc *ServerConnection) controlStreamLoop() {
 			sc.conn.CloseWithError(0, err.Error())
 			return
 		}
-		switch ff := f.(type) {
-		case frame.RequestRawStreamFrame:
-			sc.requestRawStreamChan <- &ff
-		case frame.RequestFrameStreamFrame:
-			sc.requestFrameStreamChan <- &ff
+		msg := sc.controlStream.ParseMsg(f)
+		fmt.Println(msg.Type())
+		switch msg.Type() {
+		case RequestRawStreamMsgTag:
+			fmt.Println(msg.(*RequestRawStreamMsg), 1)
+			sc.requestRawStreamChan <- msg.(*RequestRawStreamMsg)
+		case RequestFrameStreamMsgTag:
+			fmt.Println(msg.(*RequestFrameStreamMsg).Type(), 2)
+			sc.requestFrameStreamChan <- &RequestFrameStreamMsg{}
+			fmt.Println(msg.(*RequestFrameStreamMsg).Type(), 2)
+			sc.requestFrameStreamChan <- msg.(*RequestFrameStreamMsg)
+			fmt.Println("push success")
 		default:
-			fmt.Println("control stream read unexcepted frame", "frame_type", f.Type())
+			fmt.Println("control stream read unexcepted", "control msg type")
 		}
 	}
 }
 
 func (sc *ServerConnection) streamManager(ctx context.Context) chan struct{} {
 	sc.group.Add(2)
-	go sc.dataStreamManager(ctx)
+	go sc.rawStreamManager(ctx)
+	fmt.Println("start raw stream manager")
 	go sc.frameStreamManager(ctx)
+	fmt.Println("start frame stream manager")
 	sc.group.Wait()
 	return make(chan struct{})
 }
 
-func (sc *ServerConnection) dataStreamManager(ctx context.Context) chan struct{} {
+func (sc *ServerConnection) rawStreamManager(ctx context.Context) chan struct{} {
 	for {
 		ff, ok := <-sc.requestRawStreamChan
+		fmt.Println(ff)
 		if !ok {
 			fmt.Println(io.EOF)
 		}
@@ -203,7 +209,8 @@ func (sc *ServerConnection) dataStreamManager(ctx context.Context) chan struct{}
 			fmt.Println(err)
 		}
 		fmt.Println("open new data stream", newStream.StreamID())
-		_, err = newStream.Write(frame.NewAckStreamFrame().Encode())
+		ackMsg := AckStreamMsg{}.Encode()
+		_, err = newStream.Write(NewFrame(ackMsg).Encode())
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -218,6 +225,7 @@ func (sc *ServerConnection) dataStreamManager(ctx context.Context) chan struct{}
 func (sc *ServerConnection) frameStreamManager(ctx context.Context) chan struct{} {
 	for {
 		ff, ok := <-sc.requestFrameStreamChan
+		fmt.Println(ff)
 		if !ok {
 			fmt.Println(io.EOF)
 		}
@@ -234,7 +242,8 @@ func (sc *ServerConnection) frameStreamManager(ctx context.Context) chan struct{
 		}
 		newStream := NewFrameStream(newQuicStream)
 		fmt.Println("open new frame stream", newQuicStream.StreamID())
-		err = newStream.WriteFrame(frame.NewAckStreamFrame())
+		ackMsg := AckStreamMsg{}.Encode()
+		err = newStream.WriteFrame(NewFrame(ackMsg))
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -319,7 +328,7 @@ type ConnectionIC interface {
 }
 
 type ClientConnection struct {
-	Connection
+	*Connection
 }
 
 func NewClientConnection(ctx context.Context, qconn quic.Connection) *ClientConnection {
@@ -336,9 +345,9 @@ func (cc *ClientConnection) OpenNewRawStream() (RawStreamI, StreamID, error) {
 		return nil, 0, fmt.Errorf("controlStream is nil")
 	}
 
-	cc.controlStream.WriteFrame(frame.NewRequestRawStreamFrame())
+	cc.controlStream.WriteFrame(NewFrame(RequestRawStreamMsg{}.Encode()))
 
-	fmt.Println("request new data stream, awaiting")
+	fmt.Println("request new raw stream, awaiting")
 	newstream, err := cc.conn.AcceptStream(cc.ctx)
 	if err != nil {
 		return nil, 0, err
@@ -354,7 +363,7 @@ func (cc *ClientConnection) OpenNewFrameStream() (FrameStreamI, StreamID, error)
 		return nil, 0, fmt.Errorf("controlStream is nil")
 	}
 
-	cc.controlStream.WriteFrame(frame.NewRequestFrameStreamFrame())
+	cc.controlStream.WriteFrame(NewFrame(RequestFrameStreamMsg{}.Encode()))
 
 	fmt.Println("request new frame stream, awaiting")
 	newQuicstream, err := cc.conn.AcceptStream(cc.ctx)
@@ -368,8 +377,8 @@ func (cc *ClientConnection) OpenNewFrameStream() (FrameStreamI, StreamID, error)
 		return nil, 0, err
 	}
 
-	switch f.(type) {
-	case frame.AckStreamFrame:
+	switch cc.controlStream.ParseMsg(f).Type() {
+	case AckStreamMsgTag:
 		fmt.Println("reqeust success, new frame stream", newQuicstream.StreamID())
 		cc.frameStreams.Store(newQuicstream.StreamID(), newStream)
 		return newStream, StreamID(newQuicstream.StreamID()), nil

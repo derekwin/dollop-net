@@ -14,15 +14,20 @@ var ErrFrameStreamNil = errors.New("FrameStream's stream is nil")
 
 type FrameStreamI interface {
 	StreamID() StreamID
-	ReadFrame() (*Frame, error)
-	WriteFrame(f *Frame) error
+	readFrame() (*Frame, error)
+	writeFrame(f *Frame) error
+	BindMsgProtocol(msgP MsgProtocolI) // 协议绑定机制，将协议绑定到帧流上；子流级别增加新协议支持
+	GetRouter(tag MsgType) (FrameRouterI, error)
+	ReadMsg() (MsgI, error) // 根据绑定的消息协议，完成帧到msg一步到位解析
+	WriteMsg(m MsgI) error  // 根据绑定的消息协议，将msg包装成帧发送
 	Close()
 }
 
 // FrameStream is the ReadWriter that goroutinue read write safely.
 type FrameStream struct {
-	stream quic.Stream
-	mu     sync.Mutex
+	stream      quic.Stream
+	msgProtocol MsgProtocolI
+	mu          sync.Mutex
 }
 
 // NewFrameStream creates a new FrameStream.
@@ -54,7 +59,7 @@ func readFrame(stream io.Reader) (*Frame, error) {
 }
 
 // ReadFrame reads next frame from underlying stream.
-func (fs *FrameStream) ReadFrame() (*Frame, error) {
+func (fs *FrameStream) readFrame() (*Frame, error) {
 	if fs.stream == nil {
 		return &Frame{}, ErrFrameStreamNil
 	}
@@ -62,7 +67,7 @@ func (fs *FrameStream) ReadFrame() (*Frame, error) {
 }
 
 // WriteFrame writes a frame into underlying stream.
-func (fs *FrameStream) WriteFrame(f *Frame) error {
+func (fs *FrameStream) writeFrame(f *Frame) error {
 	if fs.stream == nil {
 		return ErrFrameStreamNil
 	}
@@ -75,4 +80,27 @@ func (fs *FrameStream) WriteFrame(f *Frame) error {
 
 func (fs *FrameStream) Close() {
 	fs.stream.Close()
+}
+
+func (fs *FrameStream) BindMsgProtocol(msgP MsgProtocolI) {
+	fs.msgProtocol = msgP
+}
+
+func (fs *FrameStream) GetRouter(tag MsgType) (FrameRouterI, error) {
+	return fs.msgProtocol.GetRouter(tag)
+}
+
+func (fs *FrameStream) ReadMsg() (MsgI, error) {
+	f, err := fs.readFrame()
+	if err != nil {
+		return nil, err
+	}
+
+	return fs.msgProtocol.PaserMsg(f), nil
+}
+
+func (fs *FrameStream) WriteMsg(m MsgI) error {
+	f := NewFrame(m.Encode())
+	fs.writeFrame(f)
+	return nil
 }

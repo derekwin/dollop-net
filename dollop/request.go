@@ -1,13 +1,13 @@
 package dollop
 
 type RequestI interface {
-	GetConn() ConnectionI
-	GetData() []byte
+	GetConn() (ConnectionI, error)
+	GetData() ([]byte, error)
 }
 
 type RawRequestI interface {
 	RequestI
-	GetStream() RawStreamI
+	GetStream() (RawStreamI, error)
 }
 
 // Request bind stream with data
@@ -18,21 +18,21 @@ type RawRequest struct {
 	data   []byte
 }
 
-func (r RawRequest) GetConn() ConnectionI {
-	return r.conn
+func (r RawRequest) GetConn() (ConnectionI, error) {
+	return r.conn, nil
 }
 
-func (r RawRequest) GetStream() RawStreamI {
-	return r.stream
+func (r RawRequest) GetStream() (RawStreamI, error) {
+	return r.stream, nil
 }
 
-func (r RawRequest) GetData() []byte {
-	return r.data
+func (r RawRequest) GetData() ([]byte, error) {
+	return r.data, nil
 }
 
 type FrameRequestI interface {
 	RequestI
-	GetStream() FrameStreamI
+	GetStream() (FrameStreamI, error)
 }
 
 // Request bind stream with data
@@ -40,17 +40,21 @@ type FrameRequestI interface {
 type FrameRequest struct {
 	conn   ConnectionI
 	stream FrameStreamI
-	data   []byte
+	msg    MsgI
 }
 
-func (r FrameRequest) GetConn() ConnectionI {
-	return r.conn
+func (r FrameRequest) GetConn() (ConnectionI, error) {
+	return r.conn, nil
 }
 
-func (r FrameRequest) GetStream() FrameStreamI {
-	return r.stream
+func (r FrameRequest) GetStream() (FrameStreamI, error) {
+	return r.stream, nil
 }
 
-func (r FrameRequest) GetData() []byte {
-	return r.data
+func (r FrameRequest) GetMsg() (MsgI, error) {
+	return r.msg, nil
+}
+
+func (r FrameRequest) GetData() ([]byte, error) {
+	return r.msg.GetData(), nil
 }

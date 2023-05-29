@@ -14,26 +14,25 @@ type RawStreamRouter struct {
 	dollop.BaseRawRouter
 }
 
-func (lr RawStreamRouter) Handler(req dollop.RawRequestI) {
-	stream := req.GetStream()
-	fmt.Printf("--- handler raw data '%s' from id %d \n", req.GetData(), stream.StreamID())
-	_, err := stream.Write(req.GetData())
+func (lr RawStreamRouter) Handler(req dollop.RawRequestI) error {
+	stream, err := req.GetStream()
 	if err != nil {
 		fmt.Println(err)
+		return err
 	}
-}
-
-type FrameStreamRouter struct {
-	dollop.BaseFrameRouter
-}
-
-func (lr FrameStreamRouter) Handler(req dollop.FrameRequestI) {
-	stream := req.GetStream()
-	fmt.Printf("--- handler frame data '%s' from id %d \n", string(req.GetData()), stream.StreamID())
-	err := stream.WriteFrame(dollop.NewFrame(req.GetData()))
+	data, err := req.GetData()
 	if err != nil {
 		fmt.Println(err)
+		return err
 	}
+	fmt.Printf("--- handler raw data '%s' from id %d \n", data, stream.StreamID())
+	_, err = stream.Write(data)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	return nil
 }
 
 func main() {
@@ -43,10 +42,9 @@ func main() {
 	}
 
 	rawrouter := RawStreamRouter{}
-	framerouter := FrameStreamRouter{}
 
 	server, err := dollop.NewServer("test", dollop.WithTlsConfig(tlsServer),
-		dollop.WithRawRouter(rawrouter), dollop.WithFrameRouter(framerouter))
+		dollop.WithRawRouter(rawrouter))
 	if err != nil {
 		panic(err)
 	}

@@ -8,12 +8,7 @@ import (
 // Type represents the type of frame.
 const FrameLen int = 4 // int32
 
-// read raw frame from quic.stream
-type FrameI interface {
-	GetData() []byte
-	Encode() []byte
-}
-
+// 帧在本框架是固定的存在，帧流的最小单元永远是Frame
 type Frame struct {
 	len  int // how long this frame
 	data []byte

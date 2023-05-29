@@ -35,7 +35,8 @@ func (c *Client) Connect(addr string) {
 		panic(err)
 	}
 
-	controlStream := NewControlStream(stream)
+	controlStream := NewFrameStream(stream)
+	controlStream.BindMsgProtocol(controlMsgProtocol)
 
 	c.conn.setControlStream(controlStream)
 }

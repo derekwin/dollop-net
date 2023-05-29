@@ -124,8 +124,9 @@ func (s *Server) Serve(ctx context.Context, addr string) error {
 		}
 
 		conn := NewServerConnection(ctx, qconn)
-		conn.bindRawRouters(s.RawRouters) // 将服务器路由绑定到流路由
-		conn.bindFrameRouters(s.FrameRouters)
+		conn.BindRawRouters(s.RawRouters) // 将服务器路由绑定到流路由
+		// 子流在启动后均会绑定defaultMsgProtocol, 由controlMsg协议的Router设定
+		// 后续子流的协议，可以开发时自行指定，BindMsgProtocol。
 
 		go func(conn *ServerConnection) {
 

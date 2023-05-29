@@ -60,8 +60,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	framestream.WriteFrame(dollop.NewFrame(data))
-	f, err := framestream.ReadFrame()
+	framestream.WriteMsg(dollop.NewBaseMsg([]byte("hello form base msg")))
+	f, err := framestream.ReadMsg()
 	if err != nil {
 		log.Fatal(err)
 	}
